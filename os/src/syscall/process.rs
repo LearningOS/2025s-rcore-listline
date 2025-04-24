@@ -1,6 +1,6 @@
 //! Process management syscalls
 use crate::{
-    task::{exit_current_and_run_next, suspend_current_and_run_next},
+    task::{exit_current_and_run_next, suspend_current_and_run_next,get_syscall_count},
     timer::get_time_us,
 };
 
@@ -39,7 +39,30 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 }
 
 // TODO: implement the syscall
-pub fn sys_trace(_trace_request: usize, _id: usize, _data: usize) -> isize {
+pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
     trace!("kernel: sys_trace");
-    -1
+    
+    match trace_request {
+        0 => {
+            // 读取用户地址处的一个字节
+            let ptr = id as *const u8;
+            // 安全：根据需求，我们不做安全检查
+            unsafe { *ptr as isize }
+        }
+        1 => {
+            // 写入一个字节到用户地址
+            let ptr = id as *mut u8;
+            // 安全：根据需求，我们不做安全检查
+            unsafe { 
+                *ptr = data as u8;
+                0 // 返回0
+            }
+        }
+        2 => {
+            // 获取系统调用计数 (包括本次调用)
+            // 注意：本次系统调用已经在 syscall 函数中计数了
+            get_syscall_count(id) as isize
+        }
+        _ => -1,
+    }
 }
