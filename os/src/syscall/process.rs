@@ -1,6 +1,7 @@
 //! Process management syscalls
 use crate::task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next,get_syscall_count,current_user_token};
-use crate::mm::{VirtAddr, PageTable};
+use crate::mm::{translated_byte_buffer, VirtAddr, PageTable, MemorySet};
+use crate::timer::get_time_us;
 
 
 #[repr(C)]
@@ -26,10 +27,39 @@ pub fn sys_yield() -> isize {
 
 /// YOUR JOB: get time with second and microsecond
 /// HINT: You might reimplement it with virtual memory management.
-/// HINT: What if [`TimeVal`] is splitted by two pages ?
-pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
+/// HINT: What if [TimeVal] is splitted by two pages ?
+pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
     trace!("kernel: sys_get_time");
-    -1
+    let token = current_user_token();
+    let len = core::mem::size_of::<TimeVal>();
+    let buffers = translated_byte_buffer(token, ts as *const u8, len);
+
+    if buffers.iter().map(|b| b.len()).sum::<usize>() != len {
+        return -1;
+    }
+
+    let us = get_time_us();
+    let time_val = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+
+    // 把结构体分块拷贝到用户空间
+    let src = unsafe {
+        core::slice::from_raw_parts(
+            &time_val as *const TimeVal as *const u8,
+            len,
+        )
+    };
+
+    let mut offset = 0;
+    for dst in buffers {
+        let end = offset + dst.len();
+        dst.copy_from_slice(&src[offset..end]);
+        offset = end;
+    }
+
+    0
 }
 
 /// TODO: Finish sys_trace to pass testcases
@@ -55,7 +85,6 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
                     return value as isize;
                 }
             }
-            // Address is not valid or not readable
             -1
         },
         1 => {
@@ -76,12 +105,10 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
                     return 0;
                 }
             }
-            // Address is not valid or not writable
             -1
         }
         2 => {
             // 获取系统调用计数 (包括本次调用)
-            // 注意：本次系统调用已经在 syscall 函数中计数了
             get_syscall_count(id) as isize
         }
         _ => -1,
@@ -89,16 +116,21 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
 }
 
 // YOUR JOB: Implement mmap.
-pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    
+    let mut memory_set = MemorySet::new_bare();
+    memory_set.mmap(start, len, port)
 }
 
 // YOUR JOB: Implement munmap.
-pub fn sys_munmap(_start: usize, _len: usize) -> isize {
+pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    
+    let mut memory_set = MemorySet::new_bare();
+    memory_set.unmmap(start, len)
 }
+
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {
     trace!("kernel: sys_sbrk");
