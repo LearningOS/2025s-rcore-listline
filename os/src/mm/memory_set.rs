@@ -296,10 +296,7 @@ impl MemorySet {
         println!("[mmap] flags={:#b}", flags.bits());
 
         let va_end: VirtAddr = (start + len).into();
-        if !va_end.aligned() {
-            println!("[mmap] failed: end address not aligned");
-            return -1;
-        }
+        
         let va_end: VirtPageNum = va_end.ceil();
         println!("[mmap] va_start={}, va_end={}", va_start.0, va_end.0);
 
@@ -341,10 +338,7 @@ impl MemorySet {
         let mut va_start: VirtPageNum = va_start.into();
 
         let va_end: VirtAddr = (start + len).into();
-        if !va_end.aligned() {
-            println!("[unmmap] failed: end address not aligned");
-            return -1;
-        }
+        
         let va_end: VirtPageNum = va_end.ceil();
         println!("[unmmap] va_start={}, va_end={}", va_start.0, va_end.0);
 

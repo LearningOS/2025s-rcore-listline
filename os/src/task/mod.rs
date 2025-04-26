@@ -21,7 +21,6 @@ use alloc::vec::Vec;
 use lazy_static::*;
 use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
-
 pub use context::TaskContext;
 
 /// The task manager, where all the tasks are managed.
@@ -89,6 +88,7 @@ impl TaskManager {
         panic!("unreachable in run_first_task!");
     }
 
+
     /// Change the status of current `Running` task into `Ready`.
     fn mark_current_suspended(&self) {
         let mut inner = self.inner.exclusive_access();
@@ -153,6 +153,21 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+    /// 创建内存映射
+    pub fn make_mmap(&self, start: usize, len: usize, port: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let memory_set = &mut inner.tasks[current].memory_set;
+        memory_set.mmap(start, len, port)
+    }
+
+    /// 删除内存映射
+    pub fn make_munmap(&self, start: usize, len: usize) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let memory_set = &mut inner.tasks[current].memory_set;
+        memory_set.unmmap(start, len)
+    }
 }
 
 /// Run the first task in task list.
@@ -208,6 +223,8 @@ pub fn current_task() -> usize {
     TASK_MANAGER.inner.exclusive_access().current_task
 }
 
+
+
 /// 增加指定系统调用的计数
 pub fn add_syscall_count(syscall_id: usize) {
     let mut inner = TASK_MANAGER.inner.exclusive_access();
@@ -226,4 +243,14 @@ pub fn get_syscall_count(syscall_id: usize) -> usize {
     } else {
         0
     }
+}
+
+/// make_mmap
+pub fn make_mmap(start: usize, len: usize, port: usize) -> isize {
+    TASK_MANAGER.make_mmap(start, len, port)
+}
+
+/// make_munmap
+pub fn make_munmap(start: usize, len: usize) -> isize {
+    TASK_MANAGER.make_munmap(start, len)
 }

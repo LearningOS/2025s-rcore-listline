@@ -1,6 +1,7 @@
 //! Process management syscalls
-use crate::task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next,get_syscall_count,current_user_token};
-use crate::mm::{translated_byte_buffer, VirtAddr, PageTable, MemorySet};
+use crate::task::{change_program_brk, exit_current_and_run_next, suspend_current_and_run_next,get_syscall_count,
+    current_user_token,make_mmap,make_munmap};
+use crate::mm::{translated_byte_buffer, VirtAddr, PageTable,PhysAddr};
 use crate::timer::get_time_us;
 
 
@@ -66,51 +67,40 @@ pub fn sys_get_time(ts: *mut TimeVal, _tz: usize) -> isize {
 /// HINT: You might reimplement it with virtual memory management.
 pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
     trace!("kernel: sys_trace");
+    let page_table = PageTable::from_token(current_user_token());
+    let virtaddr = VirtAddr::from(id);
+    let pte = match page_table.translate(virtaddr.floor()) {
+        Some(pte) => pte,
+        None => return -1, 
+    };
     match trace_request {
         0 => {
-            // Read one byte from user address
-            let ptr = id as *const u8;
-            let token = current_user_token();
-            let va = VirtAddr::from(ptr as usize);
-            let page_table = PageTable::from_token(token);
-            
-            // Get the page table entry for the virtual address
-            if let Some(pte) = page_table.translate(va.floor()) {
-                // Check if the page is valid and readable
-                if pte.is_valid() && pte.readable() {
-                    let ppn = pte.ppn();
-                    let offset = va.page_offset();
-                    // Safe access to physical memory
-                    let value = ppn.get_bytes_array()[offset];
-                    return value as isize;
-                }
+            if pte.is_user() && pte.readable() {
+                let physaddr: PhysAddr = pte.ppn().into();
+                let addr = physaddr.0 | virtaddr.page_offset();
+                let raw_ptr = addr as *const u8;
+                unsafe { *raw_ptr as isize }
+            } else {
+                -1
             }
-            -1
         },
         1 => {
-            // Write one byte to user address
-            let ptr = id as *mut u8;
-            let token = current_user_token();
-            let va = VirtAddr::from(ptr as usize);
-            let page_table = PageTable::from_token(token);
-            
-            // Get the page table entry for the virtual address
-            if let Some(pte) = page_table.translate(va.floor()) {
-                // Check if the page is valid and writable
-                if pte.is_valid() && pte.writable() {
-                    let ppn = pte.ppn();
-                    let offset = va.page_offset();
-                    // Safe write to physical memory
-                    ppn.get_bytes_array()[offset] = data as u8;
-                    return 0;
+            if pte.is_user() && pte.writable() {
+                let physaddr: PhysAddr = pte.ppn().into();
+                let addr = physaddr.0 | virtaddr.page_offset();
+                let raw_ptr = addr as *mut u8;
+                unsafe {
+                    *raw_ptr = data as u8;
+                    0
                 }
+            } else {
+                -1
             }
-            -1
-        }
+        },
         2 => {
             // 获取系统调用计数 (包括本次调用)
             get_syscall_count(id) as isize
-        }
+        },
         _ => -1,
     }
 }
@@ -119,16 +109,16 @@ pub fn sys_trace(trace_request: usize, id: usize, data: usize) -> isize {
 pub fn sys_mmap(start: usize, len: usize, port: usize) -> isize {
     trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
     
-    let mut memory_set = MemorySet::new_bare();
-    memory_set.mmap(start, len, port)
+    make_mmap(start, len, port)
+
 }
 
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(start: usize, len: usize) -> isize {
     trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
     
-    let mut memory_set = MemorySet::new_bare();
-    memory_set.unmmap(start, len)
+    make_munmap(start, len)
+
 }
 
 /// change data segment size
