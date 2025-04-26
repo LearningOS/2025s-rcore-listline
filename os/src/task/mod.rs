@@ -202,3 +202,28 @@ pub fn current_trap_cx() -> &'static mut TrapContext {
 pub fn change_program_brk(size: i32) -> Option<usize> {
     TASK_MANAGER.change_current_program_brk(size)
 }
+
+/// 获取当前正在运行的任务
+pub fn current_task() -> usize {
+    TASK_MANAGER.inner.exclusive_access().current_task
+}
+
+/// 增加指定系统调用的计数
+pub fn add_syscall_count(syscall_id: usize) {
+    let mut inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    if syscall_id < inner.tasks[current].syscall_count.len() {
+        inner.tasks[current].syscall_count[syscall_id] += 1;
+    }
+}
+
+/// 获取当前任务特定系统调用的计数
+pub fn get_syscall_count(syscall_id: usize) -> usize {
+    let inner = TASK_MANAGER.inner.exclusive_access();
+    let current = inner.current_task;
+    if syscall_id < inner.tasks[current].syscall_count.len() {
+        inner.tasks[current].syscall_count[syscall_id]
+    } else {
+        0
+    }
+}
