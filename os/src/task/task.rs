@@ -236,6 +236,20 @@ impl TaskControlBlock {
             None
         }
     }
+
+    ///get_mmap
+    pub fn get_map(&mut self, start: usize, len: usize) -> isize {
+        let mut inner = self.inner_exclusive_access();
+        let mut memory_set = &mut inner.memory_set;
+        memory_set.mmap()
+    }
+
+    ///get_munmap
+    pub fn get_unmap(&mut self, start: usize, len: usize) -> isize {
+        let mut inner = self.inner_exclusive_access();
+        let mut memory_set = &mut inner.memory_set;
+        memory_set.munmap()
+    }
 }
 
 #[derive(Copy, Clone, PartialEq)]
