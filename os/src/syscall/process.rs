@@ -4,11 +4,10 @@ use alloc::sync::Arc;
 
 use crate::{
     fs::{open_file, OpenFlags},
-    loader::get_app_data_by_name,
     mm::{translated_refmut, translated_str,translated_byte_buffer},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
-        suspend_current_and_run_next,get_mmap, get get_munmap
+        suspend_current_and_run_next,get_mmap, get_munmap,
     },
     timer::get_time_us,
 };
@@ -148,7 +147,7 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
         "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    get_mmap(_start, _len, _port)
 }
 
 /// YOUR JOB: Implement munmap.
@@ -178,9 +177,10 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         current_task().unwrap().pid.0
     );
     let path = translated_str(current_user_token(), _path);
-    if let Some(data) = get_app_data_by_name(&path) {
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let data = app_inode.read_all();
         let task = current_task().unwrap();
-        let new_task = task.spawn(data);
+        let new_task = task.spawn(data.as_slice());
         let new_pid = new_task.pid.0;
         // modify trap context of new_task, because it returns immediately after switching
         let trap_cx = new_task.inner_exclusive_access().get_trap_cx();
